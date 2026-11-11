@@ -1,0 +1,26 @@
+{
+  "name": "assess-oss",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Source-backed OSS briefs for humans and coding agents",
+  "license": "MIT",
+  "author": "Ariel Sakin",
+  "repository": { "type": "git", "url": "git+https://github.com/asakin/assess-oss.git" },
+  "homepage": "https://github.com/asakin/assess-oss#readme",
+  "bugs": { "url": "https://github.com/asakin/assess-oss/issues" },
+  "keywords": ["agent-skills", "open-source", "github", "npm", "crates", "research"],
+  "bin": { "assess-oss": "bin/assess-oss.mjs" },
+  "files": ["bin/", "skills/assess-oss/", "scripts/install.mjs", "CONTRIBUTING.md", "SECURITY.md"],
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "assess": "node skills/assess-oss/scripts/cli.mjs",
+    "eval:outputs": "node scripts/evaluate.mjs",
+    "test:package": "node scripts/test-package.mjs",
+    "test:skills": "node scripts/test-skills-install.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "prepublishOnly": "npm test && npm run check && npm run test:package"
+  }
+}

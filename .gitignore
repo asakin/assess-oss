@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+*-workspace/
+.DS_Store
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+/AGENTS.md
+*.tgz

@@ -1,0 +1,27 @@
+name: Bug report
+description: Report an incorrect result, installation problem, or collector failure.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove credentials and private requirements from commands and output before posting.
+        For a vulnerability, use private security reporting instead of a public issue.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the actual and expected behavior, including incorrect evidence or missing warnings.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the command or agent request and public project reference.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, agent/version, installation method, and sanitized error output.

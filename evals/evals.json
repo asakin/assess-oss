@@ -1,0 +1,50 @@
+{
+  "skill_name": "assess-oss",
+  "evals": [
+    {
+      "id": 1,
+      "name": "inspect-crate",
+      "prompt": "Assess clap for a cross-platform Rust CLI. Give source-backed popularity, license and maintenance evidence. Do not infer platform support solely from its language.",
+      "expected_output": "A crate brief with labeled download metrics, repository enrichment, source dates, and platform evidence or explicit unknowns.",
+      "args": ["inspect", "crate:clap"],
+      "fixture_args": ["inspect", "crate:tool"],
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "compare-packages",
+      "prompt": "Compare picocolors and kleur for adding terminal colors to a small Node CLI. Keep facts separate from recommendations and show download windows.",
+      "expected_output": "A two-package comparison with source-specific download windows, license, repository facts, and no universal quality score.",
+      "args": ["compare", "npm:picocolors", "npm:kleur", "--goal", "Terminal colors in a small Node CLI"],
+      "fixture_args": ["compare", "npm:tool", "npm:other"],
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "find-alternatives",
+      "prompt": "Find candidate alternatives to clap for parsing command-line arguments in Rust. Distinguish related packages from verified substitutes.",
+      "expected_output": "A bounded candidate list with seed excluded, search query and source links, and a warning to inspect candidates before recommending.",
+      "args": ["alternatives", "crate:clap", "--query", "command line argument parser", "--limit", "3"],
+      "fixture_args": ["alternatives", "crate:tool", "--query", "argument parser", "--limit", "3"],
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "public-portfolio",
+      "prompt": "What else has @alexeyraspopov built, and what public contributions outside his own repositories can we see? No comparison to other developers or personal score.",
+      "expected_output": "A descriptive portfolio with explicit highlight selection, external PR/issue examples, incomplete-coverage caveats, and no person ranking.",
+      "args": ["profile", "@alexeyraspopov"],
+      "fixture_args": ["profile", "@alice"],
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "maintainer-context",
+      "prompt": "Check the people behind alexeyraspopov/picocolors. Separate creator, current owner, documented maintainer and contributor evidence, then show the owner's other projects.",
+      "expected_output": "Repository relationship evidence and a bounded owner portfolio, with unknown creator/maintainer roles left unverified rather than inferred from commit counts.",
+      "args": ["maintainers", "alexeyraspopov/picocolors"],
+      "fixture_args": ["maintainers", "alice/tool"],
+      "files": []
+    }
+  ]
+}
