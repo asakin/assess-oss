@@ -36,7 +36,7 @@ export async function github(client, id, { readme = true, details = false, follo
     ['identity', 'description', 'popularity', 'activity', 'license', 'topics', 'owner', 'open_issues_and_pull_requests']);
   if (!repo) return { ...record, status: 'unavailable' };
   Object.assign(record, repoSummary(repo), {
-    kind: 'github', status: 'ok', homepage: repo.homepage ?? null,
+    kind: 'github', status: 'ok', requested_id: id, homepage: repo.homepage ?? null,
     owner: { login: repo.owner.login, type: repo.owner.type, url: repo.owner.html_url,
       role: 'repository_owner', administrative_control: repo.owner.type === 'User' ? true : null },
     topics: repo.topics ?? [], created_at: repo.created_at ?? null,
@@ -44,7 +44,10 @@ export async function github(client, id, { readme = true, details = false, follo
     activity_note: 'Repository push time is not a maintenance guarantee.',
     open_issues_and_pull_requests: repo.open_issues_count ?? null,
   });
-  // Follow the canonical identity returned by GitHub without following HTTP redirects.
+  if (record.id.toLowerCase() !== id.toLowerCase()) {
+    record.warnings.push(`Repository moved or renamed: ${id} -> ${record.id}.`);
+  }
+  // Enrich the canonical repository returned by GitHub, including after redirects.
   const canonical = `${GH}/repos/${record.id}`;
   const [languages, release, contributors, readmeData] = await Promise.all([
     source(client, record, `${canonical}/languages`, ['languages']),
@@ -80,6 +83,7 @@ export async function github(client, id, { readme = true, details = false, follo
     if (linked.status === 'ok' && matchesRepository(linked.repository_link, record.id)) {
       record.packages.push({ ...linked, relationship: 'homepage and registry repository backlink agree' });
     } else {
+      record.package_hints[0].evidence = linked;
       record.warnings.push(`Homepage points to npm:${hint.id}, but its repository association could not be verified; package facts were not merged.`);
     }
   }
@@ -90,31 +94,34 @@ export async function github(client, id, { readme = true, details = false, follo
 export async function npm(client, id, { enrich = true, readme = true, details = false } = {}) {
   const record = base('npm', id, `https://www.npmjs.com/package/${id}`);
   const root = `https://registry.npmjs.org/${enc(id)}`;
-  const latest = await source(client, record, `${root}/latest`,
-    ['identity', 'version', 'description', 'license', 'repository', 'declared_maintainers', 'platform_constraints', 'direct_dependencies']);
-  if (!latest) return { ...record, status: 'unavailable' };
-  Object.assign(record, {
-    status: 'ok', description: latest.description ?? null,
-    version: latest.version, license: latest.license ?? null,
-    deprecated: latest.deprecated ?? null, homepage: latest.homepage ?? null,
-    keywords: latest.keywords ?? [], repository_link: latest.repository ?? null,
-    declared_maintainers: (latest.maintainers ?? []).map(m => ({ name: m.name })),
-    platform_constraints: { os: latest.os ?? null, cpu: latest.cpu ?? null, engines: latest.engines ?? null },
-    supported_platforms: null,
-    dependencies: dependencies(latest, 'published npm version', `${root}/latest`),
-  });
-  const [downloads, metadata] = await Promise.all([
+  const [latest, downloads, metadata] = await Promise.all([
+    source(client, record, `${root}/latest`,
+      ['identity', 'version', 'description', 'license', 'repository', 'declared_maintainers', 'platform_constraints', 'direct_dependencies']),
     source(client, record, `https://api.npmjs.org/downloads/point/last-month/${enc(id)}`, ['downloads']),
-    source(client, record, root, readme ? ['publication', 'readme', 'declared_maintainers'] : ['publication', 'declared_maintainers']),
+    // Full registry history can exceed the default response bound for established packages.
+    source(client, record, root,
+      ['identity', 'description', 'repository', 'publication', 'declared_maintainers', ...(readme ? ['readme'] : [])],
+      { maxBytes: 64_000_000 }),
   ]);
+  const info = latest ?? metadata ?? {};
+  Object.assign(record, {
+    status: latest || metadata ? 'ok' : 'unavailable', description: info.description ?? null,
+    version: latest?.version ?? null, license: latest?.license ?? null,
+    deprecated: latest?.deprecated ?? null, homepage: info.homepage ?? null,
+    keywords: info.keywords ?? [], repository_link: info.repository ?? null,
+    declared_maintainers: (metadata?.maintainers ?? latest?.maintainers ?? []).map(m => ({ name: m.name })),
+    platform_constraints: { os: latest?.os ?? null, cpu: latest?.cpu ?? null, engines: latest?.engines ?? null },
+    supported_platforms: null,
+    dependencies: latest ? dependencies(latest, 'published npm version', `${root}/latest`) : null,
+  });
   record.downloads = downloads ? {
     count: downloads.downloads, start: downloads.start, end: downloads.end,
     metric: 'npm downloads', note: 'Downloads are not unique users.',
   } : null;
-  publication(record, npmFirstPublication(metadata?.time), metadata?.time?.[latest.version] ?? null,
+  publication(record, npmFirstPublication(metadata?.time), metadata?.time?.[latest?.version] ?? null,
     metadata?.time?.created ?? null);
-  if (metadata?.maintainers) record.declared_maintainers = metadata.maintainers.map(m => ({ name: m.name }));
-  record.declared_maintainers_scope = metadata?.maintainers ? 'current_registry_metadata' : 'selected_version_metadata';
+  record.declared_maintainers_scope = metadata?.maintainers ? 'current_registry_metadata'
+    : latest?.maintainers ? 'selected_version_metadata' : null;
   record.readme = readme && metadata?.readme ? readmeEvidence(metadata.readme, record.url) : null;
   downloadAge(record);
   if (enrich) await enrichRepository(client, record, { details });
@@ -318,6 +325,17 @@ export async function maintainers(client, input, { people = [], details = false 
     documented_maintainer_evidence: [], contributor_candidates: [],
     profiles: [], sources: [], warnings: [],
   };
+  result.package_maintainers = project.kind === 'npm' ? project.declared_maintainers ?? []
+    : (repo?.packages ?? []).flatMap(p => p.declared_maintainers.map(m => ({
+      ...m, registry: 'npm', package: p.id, source: p.url,
+    })));
+  const selected = people.length ? people.map(p => parseReference(p.startsWith('@') || p.startsWith('user:') || p.startsWith('https://') ? p : `user:${p}`))
+    : repo?.owner ? [{ kind: 'profile', id: repo.owner.login }] : [];
+  if (selected.some(p => p.kind !== 'profile')) throw new UsageError('--person must identify a GitHub profile, not a repository.');
+  result.profiles = await Promise.all(selected.map(p => profile(client, p.id)));
+  result.profile_selection = people.length
+    ? 'Explicitly requested profiles; repository relationship must be checked against the evidence.'
+    : 'Current owner account only; organization ownership remains organization ownership.';
   if (!repo || repo.status !== 'ok') {
     result.warnings.push('GitHub repository unavailable; cannot establish account relationships.');
     return result;
@@ -327,18 +345,7 @@ export async function maintainers(client, input, { people = [], details = false 
     /\b(maintain(?:er|ers|ed)|creat(?:or|ed)|author(?:s|ed)?)\b/i.test(line)
       ? [{ text: line.slice(0, 500), line: index + 1, url: repo.readme.url, interpretation: 'Documentation excerpt; verify identity and current role.' }]
       : []).slice(0, 10);
-  result.package_maintainers = project.kind === 'npm' ? project.declared_maintainers ?? []
-    : (repo.packages ?? []).flatMap(p => p.declared_maintainers.map(m => ({
-      ...m, registry: 'npm', package: p.id, source: p.url,
-    })));
   result.contributor_candidates = (repo.contributors?.people ?? [])
     .filter(p => p.type === 'User').slice(0, 5);
-  const selected = people.length ? people.map(p => parseReference(p.startsWith('@') || p.startsWith('user:') || p.startsWith('https://') ? p : `user:${p}`))
-    : [{ kind: 'profile', id: repo.owner.login }];
-  if (selected.some(p => p.kind !== 'profile')) throw new UsageError('--person must identify a GitHub profile, not a repository.');
-  result.profiles = await Promise.all(selected.map(p => profile(client, p.id)));
-  result.profile_selection = people.length
-    ? 'Explicitly requested profiles; repository relationship must be checked against the evidence.'
-    : 'Current owner account only; organization ownership remains organization ownership.';
   return result;
 }

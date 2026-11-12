@@ -18,8 +18,11 @@ function safeUrl(url) {
 const ghRepo = record => record.kind === 'github' ? record : record.repository;
 
 function sourceLines(record) {
-  return (record.sources ?? []).map(s =>
-    `- ${link(s.fields.join(', '), s.url)} — observed ${inline(s.observed_at)}${s.cached ? ' (cached)' : ''}${s.next_page ? '; more pages not fetched' : ''}`);
+  return (record.sources ?? []).flatMap(s => [
+    `- ${link(s.fields.join(', '), s.url)} — observed ${inline(s.observed_at)}${s.cached ? ' (cached)' : ''}${s.next_page ? '; more pages not fetched' : ''}`,
+    ...(s.redirects ?? []).map(hop =>
+      `- HTTP ${inline(hop.status)} redirect: ${link(hop.from, hop.from)} → ${link(hop.to, hop.to)}`),
+  ]);
 }
 function warningLines(record) {
   return (record.warnings ?? []).map(w => `- ${inline(w)}`);
@@ -75,6 +78,8 @@ function projectLines(record, { evidence = true } = {}) {
   for (const hint of repo?.package_hints ?? []) {
     if (!(repo.packages ?? []).some(p => p.id === hint.id)) {
       lines.push(`- Package hint from homepage: ${inline(`${hint.kind}:${hint.id}`)} (association not merged)`);
+      if (hint.evidence) lines.push('### Unverified homepage package (separate registry evidence)',
+        ...projectLines(hint.evidence, { evidence: false }));
     }
   }
   if (record.assessment) {

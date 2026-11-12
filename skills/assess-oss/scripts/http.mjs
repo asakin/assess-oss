@@ -6,6 +6,17 @@ import { join } from 'node:path';
 const allowed = new Set(['api.github.com', 'registry.npmjs.org', 'api.npmjs.org', 'crates.io']);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+function apiUrl(value, base) {
+  let url;
+  try { url = new URL(value, base); }
+  catch { throw new SourceError('Refusing an invalid API URL.'); }
+  if (url.protocol !== 'https:' || !allowed.has(url.hostname) ||
+      url.username || url.password || url.port) {
+    throw new SourceError('Refusing a non-public-API URL.');
+  }
+  return url;
+}
+
 export class SourceError extends Error {
   constructor(message, status = null) {
     super(message);
@@ -64,11 +75,7 @@ export class HttpClient {
   }
 
   async get(url, { accept = 'application/json', text = false, maxBytes = 8_000_000 } = {}) {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:' || !allowed.has(parsed.hostname) ||
-        parsed.username || parsed.password || parsed.port) {
-      throw new SourceError('Refusing a non-public-API URL.');
-    }
+    const parsed = apiUrl(url);
     const key = createHash('sha256').update(`${url}\n${accept}\n${text}\n${maxBytes}`).digest('hex');
     const path = this.cacheDir ? join(this.cacheDir, `${key}.json`) : null;
     if (!this.noCache && this.cacheDir) {
@@ -76,7 +83,8 @@ export class HttpClient {
         const saved = JSON.parse(await readFile(path, 'utf8'));
         if (saved.source.url === url && this.now() - Date.parse(saved.source.observed_at) < this.ttl) {
           const data = saved.data;
-          if (parsed.hostname === 'api.github.com' &&
+          if ((parsed.hostname === 'api.github.com' ||
+              new URL(saved.source.final_url ?? url).hostname === 'api.github.com') &&
               (data?.private === true || (Array.isArray(data?.items) && data.items.some(item => item.private === true)))) {
             throw new SourceError('Cached private data is not supported.');
           }
@@ -85,23 +93,40 @@ export class HttpClient {
       } catch { /* A missing/corrupt cache never prevents collection. */ }
     }
     const result = await this.slot(async () => {
-      const headers = {
-        Accept: accept,
-        'User-Agent': 'assess-oss/0.1.0 (public OSS metadata research)',
-      };
-      if (parsed.hostname === 'api.github.com') {
-        headers['X-GitHub-Api-Version'] = '2022-11-28';
-        if (this.token) headers.Authorization = `Bearer ${this.token}`;
-      }
+      let current = parsed;
+      let credentialsAllowed = parsed.hostname === 'api.github.com';
+      const redirects = [];
+      const visited = new Set([current.href]);
+      const signal = AbortSignal.timeout(this.timeout);
       let response;
-      try {
-        const request = () => this.fetcher(url, {
-          headers, redirect: 'error', signal: AbortSignal.timeout(this.timeout),
-        });
-        response = parsed.hostname === 'crates.io'
-          ? await this.paceCrates(request) : await request();
-      } catch {
-        throw new SourceError(`Request failed or timed out: ${url}`);
+      while (true) {
+        const headers = {
+          Accept: accept,
+          'User-Agent': 'assess-oss/0.1.0 (public OSS metadata research)',
+        };
+        if (current.hostname === 'api.github.com') {
+          headers['X-GitHub-Api-Version'] = '2022-11-28';
+          if (credentialsAllowed && this.token) headers.Authorization = `Bearer ${this.token}`;
+        }
+        try {
+          const request = () => this.fetcher(current.href, { headers, redirect: 'manual', signal });
+          response = current.hostname === 'crates.io'
+            ? await this.paceCrates(request) : await request();
+        } catch {
+          throw new SourceError(`Request failed or timed out: ${current.href}`);
+        }
+        if (![301, 302, 303, 307, 308].includes(response.status)) break;
+        const location = response.headers.get('location');
+        await response.body?.cancel();
+        if (!location) throw new SourceError(`Redirect without Location: ${current.href}`);
+        const next = apiUrl(location, current);
+        if (visited.has(next.href) || redirects.length >= 5) {
+          throw new SourceError(`Redirect loop or limit exceeded: ${url}`);
+        }
+        redirects.push({ from: current.href, to: next.href, status: response.status });
+        visited.add(next.href);
+        credentialsAllowed &&= next.origin === current.origin;
+        current = next;
       }
       if (!response.ok) {
         const reset = response.headers.get('x-ratelimit-reset');
@@ -122,7 +147,7 @@ export class HttpClient {
       let data;
       try { data = text ? raw : JSON.parse(raw); }
       catch { throw new SourceError(`Invalid JSON from ${url}`); }
-      if (parsed.hostname === 'api.github.com' &&
+      if ((parsed.hostname === 'api.github.com' || current.hostname === 'api.github.com') &&
           (data?.private === true || (Array.isArray(data?.items) && data.items.some(item => item.private === true)))) {
         throw new SourceError('Only public repositories are supported.');
       }
@@ -132,12 +157,12 @@ export class HttpClient {
         try {
           const last = new URL(lastLink);
           const page = Number(last.searchParams.get('page'));
-          const canonicalPulls = parsed.hostname === 'api.github.com' &&
-            /^\/repos\/[^/]+\/[^/]+\/pulls$/.test(parsed.pathname) &&
+          const canonicalPulls = current.hostname === 'api.github.com' &&
+            /^\/repos\/[^/]+\/[^/]+\/pulls$/.test(current.pathname) &&
             /^\/repositories\/\d+\/pulls$/.test(last.pathname);
-          const sameFilters = [...parsed.searchParams].every(([key, value]) =>
+          const sameFilters = [...current.searchParams].every(([key, value]) =>
             key === 'page' || last.searchParams.get(key) === value);
-          if (last.origin === parsed.origin && (last.pathname === parsed.pathname || canonicalPulls) &&
+          if (last.origin === current.origin && (last.pathname === current.pathname || canonicalPulls) &&
               sameFilters &&
               Number.isInteger(page) && page > 0) lastPage = page;
         } catch { /* A malformed pagination hint does not invalidate primary source data. */ }
@@ -146,6 +171,7 @@ export class HttpClient {
         data,
         source: {
           url, observed_at: new Date(this.now()).toISOString(), cached: false,
+          final_url: current.href, redirects,
           next_page: /rel="next"/.test(response.headers.get('link') ?? ''),
           last_page: lastPage,
         },
