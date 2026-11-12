@@ -38,6 +38,7 @@ npm install --global .
 ```
 
 ```sh
+assess-oss inspect assess-oss
 assess-oss inspect npm:zod
 assess-oss compare npm:express npm:fastify
 assess-oss alternatives crate:clap --query "argument parser"
@@ -45,8 +46,15 @@ assess-oss profile @sindresorhus
 assess-oss maintainers sindresorhus/slugify
 ```
 
-Use a GitHub URL or `owner/repo`, `npm:package`, `crate:name`, or `@handle`. Add `--json` for structured
+Only remember the repository name? Use it directly. The collector returns the most-starred and most-active
+exact-name GitHub matches, preferring non-forks and deduplicating the selections. Your agent tells you which
+repository it inferred so you can correct it. Activity means last push time, not a maintenance verdict.
+
+Use a GitHub URL or `owner/repo`, `npm:package`, `crate:name`, or `@handle` for exact references. Add `--json` for structured
 output, or run `assess-oss --help` for all commands and options.
+
+Redirects and repository renames remain visible in the evidence. GitHub failures do not discard registry
+facts, and registry failures do not discard GitHub facts. See the [output shapes](docs/output.md).
 
 For a project and its maintainer together, use `maintainers --person HANDLE`; no separate project/profile
 calls are needed. Add `--no-readme` for compact output or `--details` for CI, tests, issue/PR, and dependency

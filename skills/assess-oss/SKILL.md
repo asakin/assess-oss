@@ -24,6 +24,7 @@ Examples below use `<skill>` as that resolved skill directory; replace it before
 
 ```sh
 node "<skill>/scripts/cli.mjs" inspect npm:zod --json
+node "<skill>/scripts/cli.mjs" inspect assess-oss --json
 node "<skill>/scripts/cli.mjs" compare npm:express npm:fastify --json
 node "<skill>/scripts/cli.mjs" search "terminal multiplexer" --ecosystem github --limit 5 --json
 node "<skill>/scripts/cli.mjs" alternatives crate:clap --query "command line argument parser" --json
@@ -38,9 +39,16 @@ This affects output only; documentation is still collected and can be sent in an
 Add `--details` when the question needs issue/PR counts, CI, test-file evidence, or root-manifest dependencies.
 These flags also work with project inspection/comparison; heavier quality lookups are opt-in.
 
-Use explicit references: `owner/repo`, `npm:name`, `npm:@scope/name`, `crate:name`, `@handle`, `user:handle`,
-or public GitHub/npm/crates.io URLs. Bare project names are ambiguous; resolve them with search or ask for the
-ecosystem. For a bare handle explicitly identified as a person, use `@handle`.
+Accept a bare repository name such as `assess-oss`; do not demand a prefix or ask the user to search first.
+The collector searches exact GitHub repository names, preferring non-forks, and returns the most-starred
+and most-active matches (by last push), deduplicated. These are candidates, not a decision about intent.
+If they differ, show both and explain which you use for the assessment using the user's context.
+Always draw attention to the inferred identity, even when only one match is returned:
+“I inferred you meant `owner/repo` from ‘name’. If that's a different project, send its `owner/repo` or URL.”
+Do not present a guessed identity as one the user explicitly supplied.
+
+Exact references also work: `owner/repo`, `npm:name`, `npm:@scope/name`, `crate:name`, `@handle`, `user:handle`,
+or public GitHub/npm/crates.io URLs. For a bare handle explicitly identified as a person, use `@handle`.
 
 Keep the input in quoted shell arguments; never interpolate untrusted strings as shell syntax. There is no
 need to install the package being researched.
@@ -75,10 +83,17 @@ judgments of competence or trustworthiness.
 JSON output has `schema_version`, `generated_at`, and `data`. Each record includes `sources` with covered
 fields, URLs, observation timestamps, cache state, and pagination hints. Follow nested `repository.sources`
 for package enrichment.
+Sources also retain `final_url` and `redirects` (HTTP status, from, to). Report moved or renamed repositories
+when `requested_id` differs from the canonical `id`; a temporary redirect alone does not prove a rename.
+`resolved_projects` wraps the candidates and their collected workflow `results`; comparisons retain name
+lookup evidence in `resolutions`. Disclose the inference before discussing those results.
 
 Facts missing from a failed source are unknown, not zero. A useful result can contain failed enrichments: read
 `warnings`. Exit code 1 can still carry evidence; do not discard its stdout. Code 2 means fix the input. Cache
 TTL is 15 minutes; `--no-cache` bypasses cache reads and writes.
+Registry and GitHub evidence are independent. Use available registry facts when GitHub is unavailable and
+vice versa. Unverified homepage associations keep registry evidence under `package_hints[].evidence`;
+do not merge it into repository facts or claim a verified relationship.
 
 - Downloads need the **ecosystem and window**. They are not unique users. npm's 30-day downloads and crates.io
   lifetime totals are not comparable counts.

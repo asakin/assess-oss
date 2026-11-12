@@ -178,8 +178,60 @@ async function enrichRepository(client, record, options = {}) {
 
 export async function inspect(client, input, options = {}) {
   const ref = typeof input === 'string' ? parseReference(input) : input;
+  if (ref.kind === 'name') return resolveName(client, ref.id, 'inspect', options);
   if (ref.kind === 'profile') return profile(client, ref.id);
   return { github, npm, crate }[ref.kind](client, ref.id, options);
+}
+
+/** Two independent selections; deciding which project the user meant belongs to the agent. */
+async function resolveName(client, name, workflow, options) {
+  const result = {
+    ...base('resolved_projects', name, null), workflow, status: 'unavailable',
+    inferred: true, candidates: [], results: [],
+    activity_basis: 'Repository pushed_at; not proof of maintenance.',
+    coverage: 'At most 100 results per ordering, with exact repository-name matching.',
+  };
+  for (const forks of [false, true]) {
+    const query = `"${name}" in:name is:public fork:${forks ? 'only' : 'false'}`;
+    const pages = await Promise.all(['stars', 'updated'].map(sort =>
+      source(client, result,
+        `${GH}/search/repositories?q=${enc(query)}&sort=${sort}&order=desc&per_page=100`,
+        [sort === 'stars' ? 'name_matches_by_stars' : 'name_matches_by_activity'])));
+    const matches = new Map(pages.flatMap(page => page?.items ?? [])
+      .filter(repo => repo.full_name.split('/')[1]?.toLowerCase() === name.toLowerCase() && repo.fork === forks)
+      .map(repo => [repo.full_name.toLowerCase(), repoSummary(repo)]));
+    const candidates = [...matches.values()];
+    result.incomplete = pages.some(page => !page || page.incomplete_results === true) ||
+      result.sources.some(s => s.next_page);
+    if (candidates.length) {
+      const selections = [
+        ['most_starred', [...candidates].filter(r => r.stars !== null).sort((a, b) => b.stars - a.stars)[0]],
+        ['most_active', [...candidates].filter(r => Number.isFinite(Date.parse(r.pushed_at)))
+          .sort((a, b) => Date.parse(b.pushed_at) - Date.parse(a.pushed_at))[0]],
+      ];
+      for (const [reason, candidate] of selections) {
+        if (!candidate) continue;
+        const existing = result.candidates.find(c => c.id === candidate.id);
+        if (existing) existing.selected_by.push(reason);
+        else result.candidates.push({ ...candidate, ref: `github:${candidate.id}`, selected_by: [reason] });
+      }
+      if (forks) result.warnings.push('No exact non-fork match found in the sampled results; these candidates are forks.');
+      break;
+    }
+    // A failed or incomplete original search cannot justify falling back to forks.
+    if (result.incomplete) break;
+  }
+  if (!result.candidates.length) {
+    result.warnings.push(`Could not resolve "${name}" to an exact repository-name match. A GitHub URL or owner/repo would help.`);
+    return result;
+  }
+  result.warnings.push(`Inferred candidate repositories from the bare name "${name}". Tell the user which repository you assess and invite correction with owner/repo or a URL.`);
+  if (result.incomplete) result.warnings.push('Search coverage is incomplete; selections are from the returned matches.');
+  result.results = await Promise.all(result.candidates.map(candidate =>
+    ({ inspect, maintainers, alternatives })[workflow](client, candidate.ref, options)));
+  result.status = result.results.every(record => (record.project ?? record).status === 'unavailable')
+    ? 'unavailable' : 'ok';
+  return result;
 }
 
 export async function compare(client, inputs, options = {}) {
@@ -188,8 +240,10 @@ export async function compare(client, inputs, options = {}) {
   if (refs.some(r => r.kind === 'profile')) {
     throw new UsageError('Profile comparison is not supported. Inspect each public portfolio separately.');
   }
+  const collected = await Promise.all(refs.map(r => inspect(client, r, options)));
   return {
-    kind: 'comparison', projects: await Promise.all(refs.map(r => inspect(client, r, options))),
+    kind: 'comparison', projects: collected.flatMap(r => r.kind === 'resolved_projects' ? r.results : [r]),
+    resolutions: collected.filter(r => r.kind === 'resolved_projects').map(({ results: _results, ...resolution }) => resolution),
     warnings: ['Compare project fit, not raw metrics across ecosystems. No universal quality score is calculated.'],
   };
 }
@@ -233,6 +287,7 @@ export async function alternatives(client, input, { query, limit = 5, details = 
   if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new UsageError('Limit must be an integer from 1 to 10.');
   const ref = parseReference(input);
   if (ref.kind === 'profile') throw new UsageError('Alternatives apply to projects, not people.');
+  if (ref.kind === 'name') return resolveName(client, ref.id, 'alternatives', { query, limit, details });
   const seed = await inspect(client, ref, { details });
   if (seed.status === 'unavailable') return { kind: 'alternatives', seed, status: 'unavailable', candidates: [] };
   const hints = seed.topics ?? seed.keywords ?? [];
@@ -317,6 +372,7 @@ export async function maintainers(client, input, { people = [], details = false 
   const ref = parseReference(input);
   if (ref.kind === 'profile') throw new UsageError('Maintainer lookup requires a repository or package.');
   if (people.length > 3) throw new UsageError('Select at most three profiles with --person.');
+  if (ref.kind === 'name') return resolveName(client, ref.id, 'maintainers', { people, details });
   const project = await inspect(client, ref, { details });
   const repo = project.kind === 'github' ? project : project.repository;
   const result = {

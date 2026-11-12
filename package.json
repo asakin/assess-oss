@@ -10,7 +10,7 @@
   "bugs": { "url": "https://github.com/asakin/assess-oss/issues" },
   "keywords": ["agent-skills", "open-source", "github", "npm", "crates", "research"],
   "bin": { "assess-oss": "bin/assess-oss.mjs" },
-  "files": ["bin/", "skills/assess-oss/", "scripts/install.mjs", "CONTRIBUTING.md", "SECURITY.md"],
+  "files": ["bin/", "skills/assess-oss/", "scripts/install.mjs", "docs/output.md", "CONTRIBUTING.md", "SECURITY.md"],
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22" },
   "scripts": {

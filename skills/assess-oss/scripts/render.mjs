@@ -128,16 +128,30 @@ function profileLines(record) {
   ];
 }
 
+function resolutionLines(record) {
+  return [
+    `## Inferred matches for ${inline(record.id)}`,
+    'The repository identity was inferred from a bare name. Check these matches; use owner/repo or a URL to be exact.',
+    ...record.candidates.map(c => `- ${link(c.id, c.url)} — ${inline(c.selected_by.join(', '))}`),
+    shown(record.coverage), shown(record.activity_basis),
+    ...sourceLines(record), ...warningLines(record),
+  ];
+}
+
 export function markdown(result, { evidence = true } = {}) {
   const data = result.data ?? result;
   let lines = ['# assess-oss', ''];
   if (result.goal) lines.push(`Goal: ${inline(result.goal)}`, '');
   if (data.kind === 'comparison') {
+    for (const resolution of data.resolutions ?? []) lines.push(...resolutionLines(resolution), '');
     lines.push('| Project | Stars | License | Pushed | Downloads (source-specific) |',
       '| --- | ---: | --- | --- | --- |');
     for (const p of data.projects) lines.push(`| ${inline(`${p.kind}:${p.id}`)} | ${shown(ghRepo(p)?.stars)} | ${shown(p.license)} | ${shown(ghRepo(p)?.pushed_at)} | ${p.downloads ? `${shown(p.downloads.count)} (${inline(p.downloads.metric)})` : 'unknown'} |`);
     lines.push(...warningLines(data));
     for (const p of data.projects) lines.push('', ...projectLines(p, { evidence }));
+  } else if (data.kind === 'resolved_projects') {
+    lines.push(...resolutionLines(data));
+    for (const record of data.results) lines.push('', markdown(record, { evidence }).replace(/^# assess-oss\n/, ''));
   } else if (data.kind === 'profile') lines.push(...profileLines(data));
   else if (data.kind === 'maintainers') {
     lines.push(...projectLines(data.project, { evidence: false }),

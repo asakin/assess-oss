@@ -19,11 +19,11 @@ try {
   await mkdir(output, { recursive: true });
   const [packed] = JSON.parse(command(npm, ['pack', '--ignore-scripts', '--json', '--pack-destination', output], root));
   const paths = packed.files.map(file => file.path);
-  for (const required of ['package.json', 'LICENSE', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'bin/assess-oss.mjs',
+  for (const required of ['package.json', 'LICENSE', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'docs/output.md', 'bin/assess-oss.mjs',
     'scripts/install.mjs', 'skills/assess-oss/SKILL.md', 'skills/assess-oss/LICENSE',
     'skills/assess-oss/scripts/validate.mjs']) assert.ok(paths.includes(required), required);
   for (const path of paths) {
-    assert.ok(['package.json', 'LICENSE', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md'].includes(path) ||
+    assert.ok(['package.json', 'LICENSE', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'docs/output.md'].includes(path) ||
       path === 'scripts/install.mjs' || path.startsWith('bin/') ||
       path.startsWith('skills/assess-oss/'), `Unexpected published file: ${path}`);
     assert.ok(!path.split('/').some(part => part === 'AGENTS.md' || part.startsWith('.')), path);

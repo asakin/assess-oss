@@ -57,6 +57,10 @@ export function parseReference(input) {
     if (!/^[a-z\d_-]+$/i.test(id)) throw new UsageError(`Invalid crate: ${id}`);
     return { kind: 'crate', id };
   }
+  if (!value.startsWith('github:') && repoPattern.test(value) &&
+      !['.', '..'].includes(value) && value.length <= 100) {
+    return { kind: 'name', id: value };
+  }
   value = value.replace(/^github:/, '');
   const parts = value.split('/');
   const repoName = parts[1]?.replace(/\.git$/, '');
@@ -64,7 +68,7 @@ export function parseReference(input) {
       !['.', '..'].includes(repoName)) {
     return { kind: 'github', id: `${handle(parts[0])}/${repoName}` };
   }
-  throw new UsageError('Use owner/repo, @handle, npm:package, or crate:name (or their public URLs).');
+  throw new UsageError('Use a repository name, owner/repo, @handle, npm:package, or crate:name (or their public URLs).');
 }
 
 /** Package repository links commonly use git+https, ssh, and monorepo directories. */

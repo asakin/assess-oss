@@ -20,9 +20,10 @@ Commands:
   profile <@handle|profile-url>   Public portfolio and external contribution samples
   maintainers <ref>              Owner, maintainer evidence, contributor candidates
 
-References: owner/repo, github:owner/repo, npm:package, npm:@scope/package,
+References: name, owner/repo, github:owner/repo, npm:package, npm:@scope/package,
             crate:name, @handle, user:handle, or public source URLs.
-Bare names are intentionally ambiguous; supply an ecosystem prefix.
+Bare names return inferred GitHub matches: most starred and most active,
+preferring non-forks. The result discloses the guess; supply owner/repo to be exact.
 
 Options:
   --json                         Structured output (schema_version 1)
@@ -127,12 +128,12 @@ export async function run(args, { client, fetcher, key } = {}) {
   if (command === 'profile') data = await profile(client, parseReference(inputs[0]).id);
   if (command === 'maintainers') data = await maintainers(client, inputs[0], { people: options.person, ...collection });
   if (options.jev) {
-    const projects = data.kind === 'comparison' ? data.projects : [data];
+    const projects = data.projects ?? data.results ?? [data];
     for (const p of projects) p.assessment = await assess(p, options.goal, { dryRun: options['dry-run'], fetcher, key });
   }
   if (options['no-readme']) data = withoutReadmes(data);
   const result = { schema_version: 1, generated_at: new Date().toISOString(), goal: options.goal ?? null, data };
-  const projects = data.projects ?? [data.project ?? data];
+  const projects = data.projects ?? data.results?.map(r => r.project ?? r) ?? [data.project ?? data];
   const failed = data.status === 'unavailable' || projects.every(p => p.status === 'unavailable');
   const assessmentFailed = projects.some(p => p.assessment?.status === 'unavailable');
   return {

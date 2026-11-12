@@ -19,7 +19,7 @@ test('references: supported URLs, scoped names, explicit identities', () => {
   assert.deepEqual(parseReference('@Alice'), { kind: 'profile', id: 'alice' });
   assert.deepEqual(parseReference('https://github.com/alice'), { kind: 'profile', id: 'alice' });
   assert.deepEqual(parseReference('https://crates.io/crates/clap'), { kind: 'crate', id: 'clap' });
-  for (const input of ['react', 'http://github.com/alice/tool', 'https://evil.test/alice/tool',
+  for (const input of ['bad name!', 'http://github.com/alice/tool', 'https://evil.test/alice/tool',
     'https://token@github.com/alice/tool', 'npm:../../etc', 'https://github.com:444/alice/tool']) {
     assert.throws(() => parseReference(input), UsageError);
   }
@@ -42,7 +42,8 @@ test('GitHub brief preserves sources and labels contributor samples, README evid
   assert.equal(record.contributors.total, null);
   assert.equal(record.supported_platforms, null);
   assert.equal(record.readme.untrusted, true);
-  assert.equal(record.sources.length, 5);
+  assert.ok(record.sources.some(s => s.fields.includes('identity')));
+  assert.ok(record.sources.some(s => s.fields.includes('readme')));
   assert.ok(record.sources.every(s => s.url.startsWith('https:') && s.observed_at));
   assert.equal(readmeEvidence('x'.repeat(20), 'https://example.com', 5).text.length, 5);
   assert.equal(readmeEvidence('x'.repeat(20), 'https://example.com', 5).truncated, true);
@@ -136,7 +137,7 @@ test('maintainer lookup distinguishes owner, creator and contributor', async () 
   await assert.rejects(maintainers(client, 'alice/tool', { people: ['a', 'b', 'c', 'd'] }), UsageError);
 });
 
-test('HTTP client protects token origin and disallows redirects/arbitrary hosts', async () => {
+test('HTTP client sends credentials only to GitHub and refuses arbitrary hosts', async () => {
   const calls = [];
   const client = new HttpClient({ noCache: true, token: 'test-only-placeholder', fetcher: async (url, options) => {
     calls.push({ url, options });
@@ -146,7 +147,6 @@ test('HTTP client protects token origin and disallows redirects/arbitrary hosts'
   await client.get('https://registry.npmjs.org/tool');
   assert.ok(calls[0].options.headers.Authorization);
   assert.equal(calls[1].options.headers.Authorization, undefined);
-  assert.equal(calls[0].options.redirect, 'error');
   await assert.rejects(client.get('https://localhost/foo'), /Refusing/);
   await assert.rejects(client.get('http://api.github.com/users/alice'), /Refusing/);
 });
@@ -243,7 +243,7 @@ test('CLI contracts, invalid flags, machine output and terminal sanitization', a
   assert.equal(result.exitCode, 0);
   assert.equal(JSON.parse(result.text).schema_version, 1);
   assert.equal(result.result.data.kind, 'comparison');
-  for (const args of [['inspect', 'tool'], ['compare', '@alice', '@bob'],
+  for (const args of [['inspect', 'bad name!'], ['compare', '@alice', '@bob'],
     ['search', 'foo', '--limit', 'NaN'], ['inspect', 'alice/tool', '--dry-run'],
     ['profile', '@alice', '--jev', '--goal', 'good'], ['wat'], ['--typo']]) {
     assert.throws(() => argumentsFor(args), UsageError);
