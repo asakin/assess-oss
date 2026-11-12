@@ -35,7 +35,7 @@ node "<skill>/scripts/cli.mjs" maintainers sindresorhus/slugify --person sindres
 For a project-and-person request, start with `maintainers --person`: it already returns the full project,
 linked package evidence, and selected profiles. Do not repeat `inspect` or `profile` for data already there.
 Use `--no-readme --json` to omit full README text while retaining source links and short maintainer excerpts.
-This affects output only; documentation is still collected and can be sent in an explicitly approved Jev call.
+This affects output only; documentation is still collected and is sent when `--jev` is used.
 Add `--details` when the question needs issue/PR counts, CI, test-file evidence, or root-manifest dependencies.
 These flags also work with project inspection/comparison; heavier quality lookups are opt-in.
 
@@ -121,15 +121,20 @@ do not merge it into repository facts or claim a verified relationship.
 
 ## Optional Jev assessment (experimental)
 
-The adapter is fixture-tested, not live-verified. Label its judgments experimental.
+[TypeSafe's Jev](https://typesafe.ai/) answers typed questions about documented project fit and evidence
+sufficiency. The adapter is fixture-tested, not live-verified. Label its judgments experimental.
 
-Jev is a TypeSafe decision model, not a browsing or text-generation agent. The collector can optionally ask
-narrow typed questions about documented project fit and evidence sufficiency. The default path uses no model
-and no account.
+Requires a valid `TYPESAFE_API_KEY` in the process environment and HTTPS access to the TypeSafe API.
+The collector uses `typesafe/latest`. `--jev` sends the collected public documentation and the supplied
+goal to TypeSafe; a goal may contain private requirements. Never read or print credentials.
 
-Only use `--jev` when the user requests or approves TypeSafe processing. Explain that **collected public
-documentation and the supplied goal** are sent to TypeSafe; a goal may include private requirements. Never
-read or print credentials. The CLI reads `TYPESAFE_API_KEY` from the environment.
+Before interpreting Jev results, fetch and read the current
+[online TypeSafe skill](https://raw.githubusercontent.com/typesafe-ai/skills/main/skills/typesafe-ai/SKILL.md),
+especially its guidance on reading answers and probability distributions. Use the online version, not an
+installed copy. Our question definitions are in `scripts/jev.mjs`; results are under each project's
+`assessment.answers`, with the returned model identity in `assessment.model`. Interpret those answers
+against the supplied documentation and goal. `assessment.status: unavailable` and `assessment.error`
+indicate a failed assessment, not a negative judgment about the project.
 
 Preview without a TypeSafe request:
 
@@ -137,10 +142,8 @@ Preview without a TypeSafe request:
 node "<skill>/scripts/cli.mjs" inspect npm:zod --jev --goal "validate API input" --dry-run --json
 ```
 
-After approval, omit `--dry-run`. Ask for a small budget before exploratory paid tests. `--jev` works only
-with project inspect/compare, never profiles. It pins a model version, returns separate judgments and
-distributions, and does not change the facts. Unavailable credentials/API failures mean unavailable
-assessment, not negative findings. Near-threshold evidence probabilities mean uncertainty.
+Omit `--dry-run` to call the API. `--jev` works with project inspect/compare, never profiles. Each project
+is assessed separately; the judgments do not change the collected facts.
 
 ## Present the result
 

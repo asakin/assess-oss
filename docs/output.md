@@ -176,6 +176,8 @@ This disclosure is required even when both selection criteria identify the same 
 
 ## Optional Jev assessment
 
+Requests use `typesafe/latest`. Successful assessments retain the model identity returned by the API.
+
 ```ts
 type Assessment =
   | { status: 'unavailable'; error: string }

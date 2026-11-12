@@ -62,17 +62,18 @@ signals.
 
 ## Optional Jev assessments
 
-[Jev](https://docs.typesafe.ai/) can assess how well a project's documented capabilities fit your goal.
+[TypeSafe's Jev](https://typesafe.ai/) can assess how well a project's documented capabilities fit your goal.
 This integration is experimental. Regular project research works without a model account.
 
-With a TypeSafe account, set `TYPESAFE_API_KEY` in your environment and run:
+Requires a valid `TYPESAFE_API_KEY` in the process environment and HTTPS access to the TypeSafe API.
+Requests use `typesafe/latest`:
 
 ```sh
 assess-oss inspect npm:zod --jev --goal "Validate incoming API data"
 ```
 
 This sends the collected project documentation and your goal to TypeSafe. Add `--dry-run` to preview the
-request without making a paid API call. Jev assessments are available for project inspection and comparison,
+request without calling the API. Jev assessments are available for project inspection and comparison,
 not people.
 
 For agent-specific usage, see the [skill instructions](skills/assess-oss/SKILL.md).

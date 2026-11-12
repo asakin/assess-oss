@@ -221,14 +221,20 @@ test('Jev dry-run never sends; optional missing-key and failures are not negativ
   const { client } = fixtureClient();
   const project = await inspect(client, 'alice/tool');
   let calls = 0;
-  const fetcher = async () => { calls++; return Response.json({ model: 'jev-1.14.0', answers }); };
+  const fetcher = async (_url, options) => {
+    calls++;
+    assert.equal(JSON.parse(options.body).model, 'typesafe/latest');
+    return Response.json({ model: 'provider-resolved-model', answers });
+  };
   const dry = await assess(project, 'parse arguments', { dryRun: true, fetcher });
   assert.equal(dry.sent, false);
+  assert.equal(dry.request.model, 'typesafe/latest');
   assert.equal(calls, 0);
   assert.equal(payload(project, 'parse arguments').questions.documented_fit.type, 'score');
   assert.equal((await assess(project, 'parse arguments', { key: '' })).status, 'unavailable');
   const judged = await assess(project, 'parse arguments', { key: 'test-only-placeholder', fetcher });
   assert.equal(judged.interpretation, 'evidence_available');
+  assert.equal(judged.model, 'provider-resolved-model');
   assert.equal(calls, 1);
   assert.equal(interpret({ ...answers, evidence_sufficient: { noul: 0.5 } }), 'uncertain_evidence');
   assert.throws(() => interpret({}), /contract/);

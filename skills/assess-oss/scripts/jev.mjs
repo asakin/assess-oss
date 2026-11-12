@@ -1,7 +1,7 @@
 import { UsageError } from './references.mjs';
 import { boundedText } from './http.mjs';
 
-export const MODEL = 'jev-1.14.0';
+export const MODEL = 'typesafe/latest';
 
 // Judgment wording and criteria are intentionally centralized and versionable.
 export const questions = {
