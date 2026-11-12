@@ -29,12 +29,16 @@ check the evidence behind a recommendation.
 
 ## Use the CLI
 
-You can also use assess-oss directly from a terminal. Install it from a source checkout:
+You can also use assess-oss directly from a terminal. Run it with `npx`, which needs Node.js 22 or newer:
 
 ```sh
-git clone https://github.com/asakin/assess-oss.git
-cd assess-oss
-npm install --global .
+npx assess-oss inspect npm:zod
+```
+
+Or install it once and call it by name:
+
+```sh
+npm install --global assess-oss
 ```
 
 ```sh
