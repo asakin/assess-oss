@@ -1,5 +1,7 @@
 # assess-oss
 
+[![npm](https://img.shields.io/npm/v/assess-oss)](https://www.npmjs.com/package/assess-oss) [![CI](https://github.com/asakin/assess-oss/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/asakin/assess-oss/actions/workflows/check.yml) [![license](https://img.shields.io/npm/l/assess-oss)](LICENSE)
+
 A skill for choosing open-source software with your coding agent.
 
 Give it a GitHub repo, npm package, or Rust crate. Get a source-backed overview of what it does, its license,
